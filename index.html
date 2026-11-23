@@ -33,6 +33,29 @@
 <body>
   <div id="boot">JARVIS · INICIANDO…</div>
   <script>
+    // Volta do login do Google (Planilhas): o token vem no "#" do endereço.
+    // Guardamos só neste aparelho e limpamos o endereço antes do app abrir.
+    (function () {
+      var h = window.location.hash;
+      if (h.indexOf('access_token=') < 0 && h.indexOf('error=') < 0) return;
+      var p = {};
+      h.substring(1).split('&').forEach(function (kv) {
+        var i = kv.indexOf('=');
+        if (i > 0) p[decodeURIComponent(kv.substring(0, i))] = decodeURIComponent(kv.substring(i + 1).replace(/\+/g, ' '));
+      });
+      try {
+        var expected = localStorage.getItem('jarvis.google.state');
+        localStorage.removeItem('jarvis.google.state');
+        if (p.access_token && expected && p.state === expected) {
+          localStorage.setItem('jarvis.google.token', p.access_token);
+          localStorage.setItem('jarvis.google.expires', String(Date.now() + (parseInt(p.expires_in || '3600', 10) - 60) * 1000));
+          localStorage.setItem('jarvis.google.justConnected', '1');
+        } else {
+          localStorage.setItem('jarvis.google.error', p.error || 'state_mismatch');
+        }
+      } catch (e) {}
+      history.replaceState(null, '', window.location.pathname + window.location.search);
+    })();
     // Offline: guarda os arquivos do app para abrir sem internet.
     if ('serviceWorker' in navigator) {
       window.addEventListener('load', function () {
