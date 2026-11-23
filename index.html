@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <!-- Substituído por `flutter build web --base-href /caminho/`. -->
+  <base href="/jarvis-web/">
+
+  <meta charset="UTF-8">
+  <meta content="IE=Edge" http-equiv="X-UA-Compatible">
+  <meta name="description" content="JARVIS — assistente pessoal privado. Os dados ficam só neste aparelho.">
+  <!-- Ocupa a tela toda (Dynamic Island / barra inferior): o app usa SafeArea. -->
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <meta name="theme-color" content="#03070C">
+  <meta name="color-scheme" content="dark">
+  <!-- Sites não devem ser indexados por buscadores. -->
+  <meta name="robots" content="noindex, nofollow">
+
+  <!-- iPhone: "Adicionar à Tela de Início" abre em tela cheia, com ícone e nome. -->
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="JARVIS">
+  <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+
+  <link rel="icon" type="image/png" href="favicon.png"/>
+  <title>JARVIS</title>
+  <link rel="manifest" href="manifest.json">
+  <style>
+    html, body { margin: 0; height: 100%; background: #03070C; }
+    #boot { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center;
+            color: #3FD0FF; font: 600 14px/1.4 -apple-system, "Segoe UI", sans-serif; letter-spacing: 4px; }
+  </style>
+</head>
+<body>
+  <div id="boot">JARVIS · INICIANDO…</div>
+  <script>
+    // Offline: guarda os arquivos do app para abrir sem internet.
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', function () {
+        navigator.serviceWorker.register('sw.js').catch(function () {});
+      });
+    }
+    // Pede ao navegador para não apagar os dados do JARVIS por falta de espaço.
+    if (navigator.storage && navigator.storage.persist) {
+      navigator.storage.persist().catch(function () {});
+    }
+    window.addEventListener('flutter-first-frame', function () {
+      var b = document.getElementById('boot'); if (b) b.remove();
+    });
+  </script>
+  <script src="flutter_bootstrap.js" async></script>
+</body>
+</html>
