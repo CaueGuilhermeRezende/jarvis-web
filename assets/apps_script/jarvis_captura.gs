@@ -3,7 +3,10 @@
  * ==========================================
  * Recebe os lançamentos enviados pelos Atalhos do iPhone (Apple Pay, Pix
  * pelo atalho) e guarda na aba "Captura" desta planilha. O JARVIS busca os
- * pendentes quando é aberto. Roda na SUA conta Google, sem servidor nosso.
+ * pendentes quando é aberto. Também recebe do JARVIS as abas "Lançamentos",
+ * "Resumo mensal" e "Regras" (acao "sincronizar"), para a planilha ficar em
+ * dia sem o login de 1 hora do Google no navegador.
+ * Roda na SUA conta Google, sem servidor nosso.
  *
  * Como instalar: veja o README do JARVIS ("Captura automática").
  * Depois de mudar este código: Implantar > Gerenciar implantações > editar >
@@ -23,7 +26,9 @@
  * @OnlyCurrentDoc
  */
 
-var VERSAO_SCRIPT = '1';
+var VERSAO_SCRIPT = '2';
+var ABAS_SINCRONIZADAS = { lancamentos: 'Lançamentos', resumo: 'Resumo mensal', regras: 'Regras' };
+var MAX_LINHAS = 50000;
 var ABA_CAPTURA = 'Captura';
 var ABA_REGRAS = 'Regras';
 var ABA_CONFIG = 'Config';
@@ -70,9 +75,10 @@ function processar_(corpo, s) {
       if (!tokenOk_(token, cfg.captura, s)) return { ok: false, mensagem: 'Chave inválida ou revogada. Gere uma nova no JARVIS (Ajustes > Captura automática).' };
       return s.travar(function () { return capturar_(corpo, s); });
     }
-    if (acao === 'pendentes' || acao === 'confirmar') {
+    if (acao === 'pendentes' || acao === 'confirmar' || acao === 'sincronizar') {
       if (!tokenOk_(token, cfg.app, s)) return { ok: false, mensagem: 'Chave do app inválida ou revogada.' };
       if (acao === 'pendentes') return pendentes_(s);
+      if (acao === 'sincronizar') return s.travar(function () { return sincronizar_(corpo, s); });
       return s.travar(function () { return confirmar_(corpo, s); });
     }
     return { ok: false, mensagem: 'Ação desconhecida.' };
@@ -183,6 +189,46 @@ function confirmar_(c, s) {
   var ids = Array.isArray(c.ids) ? c.ids.map(String) : [];
   var n = ids.length ? s.marcarTrazidos(ids, s.agora().toISOString()) : 0;
   return { ok: true, confirmados: n };
+}
+
+/**
+ * O JARVIS manda as abas inteiras (lançamentos, resumo e regras) e o script
+ * regrava. Vai pela chave do app, então não depende do login de 1 hora do
+ * Google no navegador.
+ */
+function sincronizar_(c, s) {
+  var abas = [];
+  for (var campo in ABAS_SINCRONIZADAS) {
+    var linhas = c[campo];
+    if (linhas === undefined) continue;
+    var erro = validarLinhas_(linhas);
+    if (erro) return { ok: false, mensagem: 'Dados de "' + ABAS_SINCRONIZADAS[campo] + '" inválidos: ' + erro };
+    abas.push([ABAS_SINCRONIZADAS[campo], linhas.map(function (l) { return l.map(celula_); })]);
+  }
+  if (!abas.length) return { ok: false, mensagem: 'Nada para sincronizar.' };
+  for (var i = 0; i < abas.length; i++) s.regravarAba(abas[i][0], abas[i][1]);
+  return { ok: true, mensagem: 'Planilha atualizada.', abas: abas.length };
+}
+
+function validarLinhas_(linhas) {
+  if (!Array.isArray(linhas) || !linhas.length) return 'precisa ter ao menos o cabeçalho';
+  if (linhas.length > MAX_LINHAS) return 'linhas demais';
+  var largura = Array.isArray(linhas[0]) ? linhas[0].length : 0;
+  if (!largura) return 'cabeçalho vazio';
+  for (var i = 0; i < linhas.length; i++) {
+    if (!Array.isArray(linhas[i]) || linhas[i].length !== largura) return 'linha ' + (i + 1) + ' com tamanho diferente';
+    for (var j = 0; j < largura; j++) {
+      var v = linhas[i][j];
+      if (v !== null && typeof v !== 'string' && typeof v !== 'number' && typeof v !== 'boolean') return 'célula inválida na linha ' + (i + 1);
+    }
+  }
+  return null;
+}
+
+/** Texto que parece fórmula vira texto; o resto passa como veio. */
+function celula_(v) {
+  if (v === null) return '';
+  return typeof v === 'string' ? texto_(v) : v;
 }
 
 // ------------------------------------------------- regras compartilhadas --
@@ -316,6 +362,15 @@ function servicosGoogle_() {
       return out;
     },
     anexarCaptura: function (linha) { abaCaptura().appendRow(linha); },
+    regravarAba: function (nome, linhas) {
+      var sh = ss.getSheetByName(nome) || ss.insertSheet(nome);
+      var n = linhas.length, m = linhas[0].length;
+      if (sh.getMaxRows() < n) sh.insertRowsAfter(sh.getMaxRows(), n - sh.getMaxRows());
+      if (sh.getMaxColumns() < m) sh.insertColumnsAfter(sh.getMaxColumns(), m - sh.getMaxColumns());
+      sh.getRange(1, 1, sh.getMaxRows(), Math.max(m, sh.getLastColumn() || 1)).clearContent();
+      sh.getRange(1, 1, n, m).setValues(linhas);
+      sh.setFrozenRows(1);
+    },
     marcarTrazidos: function (ids, quando) {
       var sh = abaCaptura();
       if (sh.getLastRow() < 2) return 0;
